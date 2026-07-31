@@ -1,0 +1,93 @@
+name: Terraform Plan
+
+# Runs "when needed":
+#   - automatically on every pull request targeting main
+#   - manually from the Actions tab (workflow_dispatch)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "Project/**/*.tf"
+      - "Project/**/*.tfvars"
+      - "Project/**/*.tfbackend"
+      - "*.tf"
+      - ".github/workflows/terraform-plan.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TF_VERSION: latest          # satisfies required_version = "~>1.15" in Providers.tf
+  AWS_REGION: af-south-1       # matches the S3 backend region
+
+jobs:
+  plan:
+    name: plan (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: dev
+            backend_config: values/Dev/dev.tfbackend
+          - name: int
+            backend_config: values/int/int.tfbackend
+          - name: prod
+            backend_config: values/prod/prod.tfbackend
+    defaults:
+      run:
+        shell: bash
+        working-directory: Project
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Format check
+        continue-on-error: true       # warns but does not block the plan
+        run: terraform fmt -check -recursive
+
+      - name: Init
+        run: terraform init -input=false -backend-config=${{ matrix.backend_config }}
+
+      - name: Validate
+        run: terraform validate -no-color
+
+      - name: Plan
+        id: plan
+        env:
+          TF_VAR_environment: ${{ matrix.name }}
+        run: terraform plan -no-color -input=false -out=tfplan | tee plan.txt
+
+      - name: Publish plan to job summary
+        if: always()
+        run: |
+          {
+            echo "### Terraform Plan — ${{ matrix.name }}"
+            echo '```'
+            tail -c 60000 plan.txt 2>/dev/null || echo "(no plan output captured)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload plan artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ matrix.name }}
+          path: |
+            Project/tfplan
+            Project/plan.txt
+          retention-days: 5
+          if-no-files-found: ignore
