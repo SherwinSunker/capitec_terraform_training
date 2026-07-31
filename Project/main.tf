@@ -1,9 +1,9 @@
 module "s3" {
-    source = "../"
-    initials = var.initials
-    surname = var.surname
-    resource = var.resource
-    environment = var.environment
+  source      = "../"
+  initials    = var.initials
+  surname     = var.surname
+  resource    = var.resource
+  environment = var.environment
 }
 
 module "eks" {
@@ -14,5 +14,5 @@ module "eks" {
   vpc_id             = "vpc-04afeafc288c397af"
   rt_id              = "rtb-023fc1846d75af176"
   prefix             = "sherwin"
-  environment        = "dev"
+  environment        = var.environment
 }

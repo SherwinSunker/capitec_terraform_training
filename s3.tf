@@ -11,7 +11,9 @@ resource "aws_s3_bucket" "s3_bucket_dev" {
 }
 
 resource "aws_s3_bucket" "my-bucket" {
-  for_each = toset(var.envs)
+  # Only create the bucket for the environment currently being applied,
+  # so dev/int/prod don't all try to create the same set of buckets.
+  for_each = toset([var.environment])
   bucket   = "${var.surname}${var.initials}${var.resource}-${each.value}"
 
   tags = {

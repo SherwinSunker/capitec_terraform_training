@@ -11,57 +11,76 @@ variable "rt_id" {
   default = "rtb-023fc1846d75af176"
 }
 
+# Each environment needs its own non-overlapping subnets, but this trainee is
+# only allocated three /24s in the shared VPC. Carve each /24 into /26 blocks
+# and hand one block per environment to each AZ:
+#   dev  -> x.x.x.0/26
+#   int  -> x.x.x.64/26
+#   prod -> x.x.x.128/26
+locals {
+  env_index = {
+    dev  = 0
+    int  = 1
+    prod = 2
+  }
+  base_subnets = local.subnet_allocation.sherwin_sunker.subnets
+  az_cidrs = [
+    for cidr in local.base_subnets :
+    cidrsubnet(cidr, 2, local.env_index[var.environment])
+  ]
+}
+
 
 
 ######################## Trainee Resources ########################
 
 resource "aws_subnet" "az1" {
   vpc_id                  = var.vpc_id
-  cidr_block              = local.subnet_allocation.sherwin_sunker.subnets[0]
+  cidr_block              = local.az_cidrs[0]
   availability_zone       = var.availability_zones[0]
   map_public_ip_on_launch = true
 
   tags = {
-    Owner = "ss sunker"
-    Name = "sherwin-az1-subnet-dev"
-    Environment = "dev"
+    Owner       = "ss sunker"
+    Name        = "${var.prefix}-az1-subnet-${var.environment}"
+    Environment = var.environment
   }
   lifecycle {
-    ignore_changes = [ tags ]
+    ignore_changes = [tags]
   }
 }
 
 resource "aws_subnet" "az2" {
   vpc_id                  = var.vpc_id
-  cidr_block              = local.subnet_allocation.sherwin_sunker.subnets[1]
+  cidr_block              = local.az_cidrs[1]
   availability_zone       = var.availability_zones[1]
   map_public_ip_on_launch = true
 
   tags = {
-    Owner = "ss sunker"
-    Name = "sherwin-az2-subnet-dev"
-    Environment = "dev"
+    Owner       = "ss sunker"
+    Name        = "${var.prefix}-az2-subnet-${var.environment}"
+    Environment = var.environment
   }
 
   lifecycle {
-    ignore_changes = [ tags ]
+    ignore_changes = [tags]
   }
 }
 
 resource "aws_subnet" "az3" {
   vpc_id                  = var.vpc_id
-  cidr_block              = local.subnet_allocation.sherwin_sunker.subnets[2]
+  cidr_block              = local.az_cidrs[2]
   availability_zone       = var.availability_zones[2]
   map_public_ip_on_launch = true
 
   tags = {
-    Owner = "ss sunker"
-    Name = "sherwin-az3-subnet-dev"
-    Environment = "dev"
+    Owner       = "ss sunker"
+    Name        = "${var.prefix}-az3-subnet-${var.environment}"
+    Environment = var.environment
   }
 
   lifecycle {
-    ignore_changes = [ tags ]
+    ignore_changes = [tags]
   }
 }
 
@@ -81,7 +100,7 @@ resource "aws_route_table_association" "rt-association-3" {
 }
 
 resource "aws_eks_cluster" "eks-cluster" {
-  name = "sherwin-eks-dev"
+  name = "${var.prefix}-eks-${var.environment}"
 
   access_config {
     authentication_mode = "API"
@@ -102,14 +121,14 @@ resource "aws_eks_cluster" "eks-cluster" {
     aws_iam_role_policy_attachment.cluster_AmazonEKSClusterPolicy,
   ]
   tags = {
-    Owner = "ss sunker"
-    Name = "sherwin-eks-dev"
-    Environment = "dev"
+    Owner       = "ss sunker"
+    Name        = "${var.prefix}-eks-${var.environment}"
+    Environment = var.environment
   }
 }
 
 resource "aws_iam_role" "eks-cluster-role" {
-  name = "sherwin-eks-cluster-role-dev"
+  name = "${var.prefix}-eks-cluster-role-${var.environment}"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -127,9 +146,9 @@ resource "aws_iam_role" "eks-cluster-role" {
   })
 
   tags = {
-    Owner = "ss sunker"
-    Name = "sherwin-eks-cluster-role-dev"
-    Environment = "dev"
+    Owner       = "ss sunker"
+    Name        = "${var.prefix}-eks-cluster-role-${var.environment}"
+    Environment = var.environment
   }
 }
 
@@ -149,9 +168,9 @@ resource "aws_eks_access_entry" "eks-access-entry" {
   principal_arn = data.aws_caller_identity.current.arn
   type          = "STANDARD"
   tags = {
-    Owner = "ss sunker"
-    Name = "sherwin-eks-access-entry-dev"
-    Environment = "dev"
+    Owner       = "ss sunker"
+    Name        = "${var.prefix}-eks-access-entry-${var.environment}"
+    Environment = var.environment
   }
 }
 
@@ -166,7 +185,7 @@ resource "aws_eks_access_policy_association" "admin" {
 }
 
 resource "aws_iam_role" "node-iam-role" {
-  name = "sherwin-eks-node-iam-role-dev"
+  name = "${var.prefix}-eks-node-iam-role-${var.environment}"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -181,9 +200,9 @@ resource "aws_iam_role" "node-iam-role" {
   })
 
   tags = {
-    Owner = "ss sunker"
-    Name = "sherwin-eks-node-iam-role-dev"
-    Environment = "dev"
+    Owner       = "ss sunker"
+    Name        = "${var.prefix}-eks-node-iam-role-${var.environment}"
+    Environment = var.environment
   }
 }
 
@@ -214,7 +233,7 @@ resource "aws_security_group_rule" "nodeport-ingress-sg" {
 
 resource "aws_eks_node_group" "eks-ng" {
   cluster_name    = aws_eks_cluster.eks-cluster.name
-  node_group_name = "sherwin-eks-ng-dev"
+  node_group_name = "${var.prefix}-eks-ng-${var.environment}"
   node_role_arn   = aws_iam_role.node-iam-role.arn
   subnet_ids      = [aws_subnet.az1.id, aws_subnet.az2.id, aws_subnet.az3.id]
 
@@ -232,9 +251,9 @@ resource "aws_eks_node_group" "eks-ng" {
   }
 
   tags = {
-    Owner = "ss sunker"
-    Name = "sherwin-eks-ng-dev"
-    Environment = "dev"
+    Owner       = "ss sunker"
+    Name        = "${var.prefix}-eks-ng-${var.environment}"
+    Environment = var.environment
   }
 
   # Ensure IAM permissions are created before and deleted after the
