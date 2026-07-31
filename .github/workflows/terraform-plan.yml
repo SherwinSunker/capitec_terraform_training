@@ -53,6 +53,22 @@ jobs:
           esac
           echo "backend_config=values/$DIR/$TF_ENVIRONMENT.tfbackend" >> "$GITHUB_OUTPUT"
 
+      # Terraform's S3 backend cannot create its own state bucket, so ensure it
+      # exists before init (idempotent — no-op when it is already there).
+      - name: Ensure state backend bucket exists
+        run: |
+          BUCKET=$(sed -nE 's/^[[:space:]]*bucket[[:space:]]*=[[:space:]]*"?([^"[:space:]]+)"?.*/\1/p' "${{ steps.cfg.outputs.backend_config }}")
+          if [ -z "$BUCKET" ]; then echo "::error::could not parse bucket from backend config"; exit 1; fi
+          if aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
+            echo "State bucket '$BUCKET' already exists."
+          else
+            echo "State bucket '$BUCKET' missing — creating it in $AWS_REGION."
+            aws s3api create-bucket --bucket "$BUCKET" --region "$AWS_REGION" \
+              --create-bucket-configuration LocationConstraint="$AWS_REGION"
+            aws s3api put-bucket-versioning --bucket "$BUCKET" \
+              --versioning-configuration Status=Enabled
+          fi
+
       - name: Format check
         continue-on-error: true                    # warns but does not block the plan
         run: terraform fmt -check -recursive
