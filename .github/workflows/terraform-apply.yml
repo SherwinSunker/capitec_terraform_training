@@ -68,6 +68,9 @@ jobs:
       - name: Init
         run: terraform init -input=false -backend-config=${{ matrix.backend_config }}
 
+      - name: Validate
+        run: terraform validate -no-color
+
       - name: Apply
         env:
           TF_VAR_environment: ${{ matrix.name }}
