@@ -1,5 +1,5 @@
 bucket = "sunkersss4-dev"
-key    = "prod/terraform.tfstate"
+key    = "int/terraform.tfstate"
 region = "af-south-1"
 encrypt = true
 use_lockfile = true
