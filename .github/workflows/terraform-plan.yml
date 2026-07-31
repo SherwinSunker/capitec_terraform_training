@@ -1,27 +1,13 @@
 name: Terraform Plan
 
-# init + validate + plan run on:
-#   - pull requests targeting main
-#   - pushes to main
+# init + validate + plan run on any change to the repo:
+#   - every pull request
+#   - every push (any branch)
 #   - manual dispatch (plan on demand)
 # The environment is chosen by the repo variable TF_ENVIRONMENT (default: dev).
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - "Project/**/*.tf"
-      - "Project/**/*.tfvars"
-      - "Project/**/*.tfbackend"
-      - "*.tf"
-      - ".github/workflows/terraform-plan.yml"
   push:
-    branches: [main]
-    paths:
-      - "Project/**/*.tf"
-      - "Project/**/*.tfvars"
-      - "Project/**/*.tfbackend"
-      - "*.tf"
-      - ".github/workflows/terraform-plan.yml"
+  pull_request:
   workflow_dispatch:
 
 permissions:
