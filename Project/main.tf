@@ -15,4 +15,5 @@ module "eks" {
   rt_id              = "rtb-023fc1846d75af176"
   prefix             = "sherwin"
   environment        = var.environment
+  capacity_type      = var.capacity_type # ON_DEMAND or SPOT (validated)
 }

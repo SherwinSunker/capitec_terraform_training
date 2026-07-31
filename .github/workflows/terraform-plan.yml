@@ -1,10 +1,20 @@
 name: Terraform Plan
 
-# Runs "when needed":
-#   - automatically on every pull request targeting main
-#   - manually from the Actions tab (workflow_dispatch)
+# init + validate + plan run on:
+#   - pull requests targeting main
+#   - pushes to main
+#   - manual dispatch (plan on demand)
+# The environment is chosen by the repo variable TF_ENVIRONMENT (default: dev).
 on:
   pull_request:
+    branches: [main]
+    paths:
+      - "Project/**/*.tf"
+      - "Project/**/*.tfvars"
+      - "Project/**/*.tfbackend"
+      - "*.tf"
+      - ".github/workflows/terraform-plan.yml"
+  push:
     branches: [main]
     paths:
       - "Project/**/*.tf"
@@ -18,23 +28,14 @@ permissions:
   contents: read
 
 env:
-  TF_VERSION: latest          # satisfies required_version = "~>1.15" in Providers.tf
-  AWS_REGION: af-south-1       # matches the S3 backend region
+  TF_VERSION: latest                              # satisfies required_version = "~>1.15"
+  AWS_REGION: af-south-1                           # matches the S3 backend region
+  TF_ENVIRONMENT: ${{ vars.TF_ENVIRONMENT || 'dev' }}
 
 jobs:
   plan:
-    name: plan (${{ matrix.name }})
+    name: plan (${{ vars.TF_ENVIRONMENT || 'dev' }})
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: dev
-            backend_config: values/Dev/dev.tfbackend
-          - name: int
-            backend_config: values/int/int.tfbackend
-          - name: prod
-            backend_config: values/prod/prod.tfbackend
     defaults:
       run:
         shell: bash
@@ -55,12 +56,23 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Resolve backend config
+        id: cfg
+        run: |
+          case "$TF_ENVIRONMENT" in
+            dev)  DIR=Dev ;;
+            int)  DIR=int ;;
+            prod) DIR=prod ;;
+            *) echo "::error::Unknown TF_ENVIRONMENT '$TF_ENVIRONMENT' (expected dev|int|prod)"; exit 1 ;;
+          esac
+          echo "backend_config=values/$DIR/$TF_ENVIRONMENT.tfbackend" >> "$GITHUB_OUTPUT"
+
       - name: Format check
-        continue-on-error: true       # warns but does not block the plan
+        continue-on-error: true                    # warns but does not block the plan
         run: terraform fmt -check -recursive
 
       - name: Init
-        run: terraform init -input=false -backend-config=${{ matrix.backend_config }}
+        run: terraform init -input=false -backend-config=${{ steps.cfg.outputs.backend_config }}
 
       - name: Validate
         run: terraform validate -no-color
@@ -68,14 +80,16 @@ jobs:
       - name: Plan
         id: plan
         env:
-          TF_VAR_environment: ${{ matrix.name }}
-        run: terraform plan -no-color -input=false -out=tfplan | tee plan.txt
+          TF_VAR_environment: ${{ env.TF_ENVIRONMENT }}
+        # -lock=false so a plan on a push to main does not fight the apply
+        # workflow for the state lock (this is a read-only preview).
+        run: terraform plan -no-color -input=false -lock=false -out=tfplan | tee plan.txt
 
       - name: Publish plan to job summary
         if: always()
         run: |
           {
-            echo "### Terraform Plan — ${{ matrix.name }}"
+            echo "### Terraform Plan — ${TF_ENVIRONMENT}"
             echo '```'
             tail -c 60000 plan.txt 2>/dev/null || echo "(no plan output captured)"
             echo '```'
@@ -85,7 +99,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: tfplan-${{ matrix.name }}
+          name: tfplan-${{ env.TF_ENVIRONMENT }}
           path: |
             Project/tfplan
             Project/plan.txt

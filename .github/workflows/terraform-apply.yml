@@ -1,8 +1,9 @@
 name: Terraform Apply
 
 # Runs only when changes are pushed to main.
-# Each environment job pauses for manual approval via a GitHub Environment
-# protection rule before it applies — configure required reviewers under
+# Applies a single environment, chosen by the repo variable TF_ENVIRONMENT
+# (default: dev). The job pauses for manual approval via that GitHub
+# Environment's protection rules — configure required reviewers under
 # Settings > Environments > (dev|int|prod).
 on:
   push:
@@ -23,27 +24,17 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  TF_VERSION: latest          # satisfies required_version = "~>1.15" in Providers.tf
+  TF_VERSION: latest                              # satisfies required_version = "~>1.15"
   AWS_REGION: af-south-1
+  TF_ENVIRONMENT: ${{ vars.TF_ENVIRONMENT || 'dev' }}
 
 jobs:
   apply:
-    name: apply (${{ matrix.name }})
+    name: apply (${{ vars.TF_ENVIRONMENT || 'dev' }})
     runs-on: ubuntu-latest
-    # The environment name binds this job to that GitHub Environment's
-    # protection rules (required reviewers = the manual-approval gate).
-    environment: ${{ matrix.name }}
-    strategy:
-      fail-fast: false
-      max-parallel: 1           # apply dev -> int -> prod sequentially, never in parallel
-      matrix:
-        include:
-          - name: dev
-            backend_config: values/Dev/dev.tfbackend
-          - name: int
-            backend_config: values/int/int.tfbackend
-          - name: prod
-            backend_config: values/prod/prod.tfbackend
+    # Bind the job to the selected GitHub Environment so its protection
+    # rules (required reviewers) act as the manual-approval gate.
+    environment: ${{ vars.TF_ENVIRONMENT || 'dev' }}
     defaults:
       run:
         shell: bash
@@ -64,13 +55,24 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Resolve backend config
+        id: cfg
+        run: |
+          case "$TF_ENVIRONMENT" in
+            dev)  DIR=Dev ;;
+            int)  DIR=int ;;
+            prod) DIR=prod ;;
+            *) echo "::error::Unknown TF_ENVIRONMENT '$TF_ENVIRONMENT' (expected dev|int|prod)"; exit 1 ;;
+          esac
+          echo "backend_config=values/$DIR/$TF_ENVIRONMENT.tfbackend" >> "$GITHUB_OUTPUT"
+
       - name: Init
-        run: terraform init -input=false -backend-config=${{ matrix.backend_config }}
+        run: terraform init -input=false -backend-config=${{ steps.cfg.outputs.backend_config }}
 
       - name: Validate
         run: terraform validate -no-color
 
       - name: Apply
         env:
-          TF_VAR_environment: ${{ matrix.name }}
+          TF_VAR_environment: ${{ env.TF_ENVIRONMENT }}
         run: terraform apply -auto-approve -no-color -input=false
