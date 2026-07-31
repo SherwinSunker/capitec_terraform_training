@@ -1,6 +1,6 @@
 name: Terraform Apply
 
-# Runs when changes are pushed to main (and can also be triggered manually).
+# Runs only when changes are pushed to main.
 # Each environment job pauses for manual approval via a GitHub Environment
 # protection rule before it applies — configure required reviewers under
 # Settings > Environments > (dev|int|prod).
@@ -13,7 +13,6 @@ on:
       - "Project/**/*.tfbackend"
       - "*.tf"
       - ".github/workflows/terraform-apply.yml"
-  workflow_dispatch:
 
 permissions:
   contents: read
