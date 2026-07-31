@@ -9,6 +9,12 @@
 crash.log
 crash.*.log
 
+# Debug/trace logs (can exceed GitHub file size limits)
+*trace*.log
+
+# macOS
+.DS_Store
+
 # Sensitive variable files
 *.tfvars
 *.tfvars.json

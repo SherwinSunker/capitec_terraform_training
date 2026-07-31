@@ -5,6 +5,8 @@ terraform {
       version = "6.56.0"
     }
   }
+
+  backend "s3" {}
   #backend "s3" {
   # bucket = "sunkersss4-dev"
   #  key    = "terraform.tfstate"
@@ -14,8 +16,3 @@ terraform {
  # }
   required_version = "~>1.15"
 }
-
-#provider ="aws" {
-#  region = "af-south-1"
-#  profile = "default"
-#}
